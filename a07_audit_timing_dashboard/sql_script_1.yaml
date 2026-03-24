@@ -1,0 +1,90 @@
+sql_update_TBL_AUDMX_AUDIT_STATUS_TIMING_INPUT: >
+  INSERT INTO IA.AUDIMEX_SOURCE.TBL_AUDMX_AUDIT_STATUS_TIMING_INPUT
+  (CITY, POSTAL_CODE, COUNTRY, COUNTRY_CODE, CC_SORT_ORDER, AUDIT_NUMBER, AUDIT_TITLE, AUDIT_STATUS, WS_SORT_ORDER, WS_STATUS_RANK, LEAD_AUDITOR, AUDITOR, METATIME, FROM_STATUS, TO_STATUS, CHANGE_DATE)
+  WITH
+  aud(id,status_id,universe_id,a_number,name,start_year, meta_tx_time, meta_tx_user_id, leading_auditor_id, follup_auditor_id) as
+  (select id,state, audit_universe_id, a_number,name, year(to_date(start_date, 'YYYY-MM-DD' )), meta_tx_time, meta_tx_user_id,
+  leading_auditor_id, follup_auditor_id  from IA.AUDIMEX_SOURCE.auditing
+  )
+  ,
+  cpu(planning_unit_id, auditing_id) AS
+  (SELECT planning_unit_id, auditing_id FROM IA.AUDIMEX_SOURCE.contains_pu)
+  ,
+  aun(id,cc_sort_order,name,cognos_code,business_unit_id, au_type_id, postal_code, city,
+  reserve_varchar_04, reserve_varchar_05) as
+  (select id, cc_sort_order, name, imp_reference,business_unit_id, au_type_id, postal_code, city,
+  reserve_varchar_04, reserve_varchar_05 from IA.AUDIMEX_SOURCE.audit_universe
+  )
+  ,
+  ws(nr,name,sort_order,status_rank) as
+  (select nr, name, sort_order,DENSE_RANK() OVER(order by SORT_ORDER) as rank  from IA.AUDIMEX_SOURCE.wal_state
+  where sort_order is not null
+  and table_name='auditing'
+  )
+  ,
+  auditor(id,lastname,firstname) as
+  (select id, lastname,firstname from IA.AUDIMEX_SOURCE.auditor)
+  ,
+  loginput(id, from_state, from_status, to_state, to_status, meta_tx_time, meta_tx_user_id, change_date, change_comment, obj_id, tagged_obj_id) as
+  (select a.id, a.from_state, ws.name, a.to_state, ws1.name, a.meta_tx_time, a.meta_tx_user_id, a.change_date,a.change_comment, a.obj_id, a.tagged_obj_id
+  from IA.AUDIMEX_SOURCE.wal_state_log a
+  inner join ws
+  on a.from_state=ws.nr
+  INNER JOIN ws AS ws1
+  ON a.to_state=ws1.nr
+  )
+  ,
+  logcut(obj_id, to_state, meta_tx_time) AS
+  (SELECT obj_id, to_state, max(meta_tx_time) FROM IA.AUDIMEX_SOURCE.wal_state_log
+  GROUP BY obj_id, to_state)
+  ,
+  log(id, from_state, from_status, to_state, to_status, meta_tx_time, meta_tx_user_id, change_date, change_comment, obj_id, tagged_obj_id) AS
+  (select a.id, a.from_state, a.from_status, a.to_state, a.to_status, a.meta_tx_time, a.meta_tx_user_id, a.change_date,a.change_comment, a.obj_id, a.tagged_obj_id
+  FROM loginput a
+  INNER JOIN logcut b
+  ON a.obj_id= b.obj_id
+  AND a.to_state = b.to_state
+  AND a.meta_tx_time = b.meta_tx_time)
+  SELECT 
+  aun.city,
+  aun.postal_code,
+  aun.reserve_varchar_04 AS country,
+  aun.reserve_varchar_05 AS country_code,
+  aun.cc_sort_order,
+  aud.a_number as audit_number,
+  nvl(concat(aud.start_year,' - ',aud.name),'') as audit_title,
+  concat(ws.status_rank,' ',ws.name) as audit_status,
+  wsso.sort_order,
+  wsso.status_rank,
+  nvl(concat(auditor.firstname,' ', auditor.lastname),'') as lead_auditor,
+  nvl(concat(auditor2.firstname,' ', auditor2.lastname),'') as auditor,
+  cast(log.meta_tx_time as int) as metatime,
+  log.from_status,
+  log.to_status,
+  REPLACE(log.change_date, '/','-')
+  FROM aud
+  LEFT JOIN cpu ON aud.id = cpu.auditing_id
+  left join aun on cpu.planning_unit_id = aun.id
+  left join ws on aud.status_id=ws.nr
+  left join auditor on auditor.id=aud.leading_auditor_id
+  left join auditor as auditor2 on auditor2.id=aud.follup_auditor_id
+  left join log on log.obj_id=aud.id
+  left join ws as wsso on wsso.nr=log.to_state
+  group by
+  aun.city,
+  aun.postal_code,
+  aun.reserve_varchar_04,
+  aun.reserve_varchar_05,
+  aun.cc_sort_order,
+  aud.a_number,
+  nvl(concat(aud.start_year,' - ',aud.name),'') ,
+  concat(ws.status_rank,' ',ws.name),
+  wsso.sort_order,
+  wsso.status_rank,
+  nvl(concat(auditor.firstname,' ', auditor.lastname),''),
+  nvl(concat(auditor2.firstname,' ', auditor2.lastname),''),
+  log.meta_tx_time,
+  log.from_status,
+  log.to_status,
+  REPLACE(log.change_date, '/','-')
+  order by aud.a_number, log.meta_tx_time

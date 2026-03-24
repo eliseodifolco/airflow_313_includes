@@ -1,0 +1,37 @@
+swf_copy_command: >
+  copy INTO IA.AUDIMEX_SOURCE.TBL_AUDMX_AUDIT_STATUS_INPUT from (
+  SELECT 
+  $1:audit_id::int,
+  $1:audit_number::varchar(20),
+  $1:start_year::int,
+  $1:obj_name::varchar(80),
+  $1:subj_cat::varchar(400),
+  $1:audit_status::varchar(400),
+  $1:finding_title::varchar(16777216),
+  $1:finding_status::varchar(400),
+  $1:finding_reference_number::int,
+  $1:finding_organisational_level::varchar(80),
+  $1:action_status::varchar(400),
+  $1:due_date::varchar(20),
+  $1:closed_when::varchar(20),
+  $1:action_description::varchar(16777216),
+  $1:responsible_auditor_id::int,
+  $1:auditor::varchar(400),
+  $1:responsible_auditee_id::int,
+  $1:auditee::varchar(400),
+  $1:responsible::varchar(16777216),
+  $1:action_no::varchar(20),
+  $1:old_state::varchar(400),
+  $1:new_state::varchar(400),
+  $1:last_change_user::varchar(400),
+  $1:change_date::varchar(20),
+  $1:change_comment::varchar(16777216),
+  $1:aud_univ_name::varchar(200),
+  $1:aud_obj_name::varchar(200),
+  $1:cognos_code::varchar(20),
+  $1:cc_sort_order::varchar(20),
+  $1:start_date::varchar(20),
+  $1:division::varchar(100)
+  FROM @azure_stage_schema_audimex_source/audit_status_table.parquet)
+  file_format = (format_name = IA.SANDBOX_SOURCE.PARQUET_FORMAT)
+  FORCE=TRUE

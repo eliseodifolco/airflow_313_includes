@@ -1,0 +1,122 @@
+sql_tbl_audmx_audit_manual_append: >
+  INSERT INTO IA.AUDIMEX_SOURCE.TBL_AUDMX_AUDIT_MANUAL
+  (START_YEAR, AUDIT_NAME, CC_SORT_ORDER, AUDIT_UNIVERSE_NAME, FINDING_LEVEL, FINDING_NUMBER, FINDING_TITLE, OBSERVATION, RECOMMENDATION, RISK, SIGNIFICANCE, DUE_DATE, FOLLOW_UP_STATUS, FINDING_RESPONSIBLE, SORT_ORDER_A, AUDIT_MANUAL, SORT_ORDER_B, AUDIT_MANUAL_CHAPTER, SORT_ORDER_C, AUDIT_PROCEDURE_TITLE, AUDIT_NUMBER)
+  with
+  ws(sort_order, nr,name) as
+  (select sort_order, nr, name from IA.AUDIMEX_SOURCE.WAL_STATE
+  )
+  ,
+  act(id,issue_id,status,action, init_finish_date, closed_when, responsible, responsible_auditor_id, responsible_auditee_id,responsible_unit_id,action_no, description, state, meta_tx_time, meta_tx_user_id) as
+  (select a.id, a.issue_id, ws.name,a.description,a.init_finish_date, a.closed_when, a.responsible, a.responsible_auditor_id,a.responsible_auditee_id, a.responsible_unit_id, a.action_no, a.description, a.state, a.meta_tx_time, a.meta_tx_user_id 
+  from IA.AUDIMEX_SOURCE.SUGGESTION a
+  left join ws on a.state=ws.nr
+  )
+  ,
+  iss(id,aud_id, cc_overlay_order, gui_id,activity_id,title,observation, status, judgment, reserve_auditee_id_00, reserve_sel_issue_00_id) as
+  (select a.id, a.auditing_id,a.cc_overlay_order, a.guideline_id, a.activity_id, a.title, a.observation, ws.name, a.judgment, a.reserve_auditee_id_00, a.reserve_sel_issue_00_id 
+  from IA.AUDIMEX_SOURCE.ISSUE a
+  left join ws on a.weight=ws.nr)
+  ,
+  audm(sort_order_a,audit_manual,sort_order_b,audit_manual_chapter, sort_order_c, audit_procedure_title ) as
+  (select 
+  CASE WHEN sort_order_a = ' 243' THEN ' 043'
+  WHEN sort_order_a = ' 251' THEN ' 051'
+  WHEN sort_order_a = ' 252' THEN ' 252'
+  WHEN sort_order_a = ' 452' THEN ' 252'
+  WHEN sort_order_a = ' 272' THEN ' 072'
+  ELSE sort_order_a
+  END,
+  cascated_audit_manual,
+  sort_order_b,
+  audit_chapter,
+  sort_order,
+  guideline
+  from IA.AUDIMEX_SOURCE.TBL_AUDMX_AUDIT_MANUAL_TREE
+  )
+  ,
+  gui(id,sort_order,name) as
+  (select id,sort_order, name from IA.AUDIMEX_SOURCE.GUIDELINE)
+  ,
+  aun(id,name,cognos_code,business_unit_id, cc_sort_order) as
+  (select id, name, imp_reference,business_unit_id, cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE
+  where id in (select responsible_unit_id from act)
+  )
+  ,
+  aud(id,status,universe_id,a_number,name,start_year ) as
+  (select a.id, ws.name, a.audit_universe_id, a_number,a.name, left(a.start_date,4) from IA.AUDIMEX_SOURCE.AUDITING a
+  left join ws on a.state=ws.nr
+  where ws.name not like 'Cancelled'
+  and ws.sort_order in ('250','260'))
+  ,
+  rsi(id,name) as
+  (select id,name from IA.AUDIMEX_SOURCE.RESERVE_SEL_ISSUE_00)
+  ,
+  auditee(id,lastname,firstname) as
+  (select id, lastname,firstname from IA.AUDIMEX_SOURCE.AUDITEE)
+  SELECT
+  aud.start_year,
+  aud.name as audit_name,
+  aun.cc_sort_order,
+  aun.name as audit_universe_name,
+  nvl(rsi.name,'') as finding_level,
+  cc_overlay_order as finding_number,
+  iss.title as finding_title,
+  iss.observation as observation,
+  iss.judgment as risk,
+  iss.status as significance,
+  act.action as recommendation,
+  TRY_TO_DATE(
+  CASE
+  WHEN act.init_finish_date IS NULL OR act.init_finish_date IN ('', 'None') THEN NULL
+  ELSE CONCAT(
+  LEFT(act.init_finish_date, 4), '-', 
+  SUBSTR(act.init_finish_date, 6, 2), '-', 
+  SUBSTR(act.init_finish_date, 9, 2)
+  )
+  END,
+  'YYYY-MM-DD'
+  ) AS due_date
+  ,
+  nvl(act.status,'') as follow_up_status,
+  nvl(concat(auditee.firstname,' ', auditee.lastname),'') as finding_responsible,
+  audm.sort_order_a,
+  audm.audit_manual,
+  audm.sort_order_b,
+  audm.audit_manual_chapter, 
+  audm.sort_order_c, 
+  audm.audit_procedure_title,
+  nvl(aud.a_number,'') AS audit_number
+  from act
+  left join ws on act.state=ws.nr
+  left join iss on iss.id=act.issue_id
+  left join gui on iss.gui_id=gui.id
+  left join audm on gui.sort_order = audm.sort_order_c
+  left join aun
+  on act.responsible_unit_id=aun.id
+  inner join aud on aud.id=iss.aud_id
+  left join rsi
+  on (iss.reserve_sel_issue_00_id=rsi.id)
+  left join auditee on act.responsible_auditee_id=auditee.id
+  group by
+  aud.start_year,
+  aud.name,
+  aun.cc_sort_order,
+  aun.name,
+  nvl(rsi.name,''),
+  cc_overlay_order,
+  iss.title,
+  iss.observation,
+  iss.judgment,
+  iss.status,
+  act.action,
+  due_date,
+  nvl(act.status,''),
+  nvl(concat(auditee.firstname,' ', auditee.lastname),''),
+  audm.sort_order_a,
+  audm.audit_manual,
+  audm.sort_order_b,
+  audm.audit_manual_chapter, 
+  audm.sort_order_c, 
+  audm.audit_procedure_title,
+  nvl(aud.a_number,'')
+  order by audm.sort_order_a, audm.sort_order_b, audm.sort_order_c

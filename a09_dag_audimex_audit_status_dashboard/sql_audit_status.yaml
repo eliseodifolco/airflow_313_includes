@@ -1,0 +1,160 @@
+sql_audit_status: >
+  With
+  ws(nr,name, sort_order) as
+  (select nr, name,sort_order from [AudimexEE_SQL].[dbo].[wal_state])
+  ,
+  ws1(nr,name) as
+  (select nr, name from [AudimexEE_SQL].[dbo].[wal_state])
+  ,
+  aud(id,status,universe_id,a_number,name,start_year, start_date) as
+  (select a.id, ws.name, a.audit_universe_id, a_number,a.name, year(a.start_date), start_date from [AudimexEE_SQL].[dbo].[auditing] a
+  left join ws on a.state=ws.nr
+  where ws.name not like 'Cancelled'
+  and ws.sort_order in ('250','260'))
+  ,
+  audm(id,name) as
+  (select id, name from [AudimexEE_SQL].[dbo].[activity])
+  ,
+  iss(id,aud_id, cc_overlay_order, gui_id,activity_id,title,status, reserve_auditee_id_00, reserve_sel_issue_00_id) as
+  (select a.id, a.auditing_id,a.cc_overlay_order, a.guideline_id, a.activity_id, a.title, ws.name, a.reserve_auditee_id_00, a.reserve_sel_issue_00_id from [AudimexEE_SQL].[dbo].[issue] a
+  left join ws on a.weight=ws.nr)
+  ,
+  act(id,issue_id,status,action, init_finish_date, closed_when, responsible, responsible_auditor_id, responsible_auditee_id,responsible_unit_id,action_no, description, state, meta_tx_time, meta_tx_user_id) as
+  (select a.id, a.issue_id, ws.name,a.description,a.init_finish_date, a.closed_when, a.responsible, a.responsible_auditor_id,a.responsible_auditee_id, a.responsible_unit_id, a.action_no, a.description, a.state, a.meta_tx_time, a.meta_tx_user_id from [AudimexEE_SQL].[dbo].[suggestion] a
+  left join ws on a.state=ws.nr)
+  ,
+  auditor(id,lastname,firstname) as
+  (select id, lastname,firstname from [AudimexEE_SQL].[dbo].[auditor])
+  ,
+  auditee(id,lastname,firstname) as
+  (select id, lastname,firstname from [AudimexEE_SQL].[dbo].[auditee])
+  ,
+  logf(from_state, to_state, meta_tx_time, meta_tx_user_id,obj_id, name, change_date, change_comment) as
+  (select a.from_state, a.to_state, a.meta_tx_time, a.meta_tx_user_id,a.obj_id, ws.name, a.change_date,a.change_comment
+  from [AudimexEE_SQL].[dbo].[wal_state_log] a
+  inner join ws
+  on a.from_state=ws.nr
+  )
+  ,
+  logt(from_state, to_state,user_id, meta_tx_time, meta_tx_user_id,obj_id,change_comment,change_date, name, name1) as
+  (select a.from_state, a.to_state,a.user_id, a.meta_tx_time, a.meta_tx_user_id, a.obj_id,a.change_comment, a.change_date, ws.name, ws1.name
+  from [AudimexEE_SQL].[dbo].[wal_state_log] a
+  left join ws
+  on a.from_state=ws.nr
+  left join ws1
+  on a.to_state=ws1.nr
+  )
+  ,
+  usr(id,name) as
+  (select id, concat(firstname,' ',lastname) from [AudimexEE_SQL].[dbo].[wal_user]
+  where id in (select user_id from logt)
+  )
+  ,
+  aun(id,name,cognos_code,business_unit_id, cc_sort_order) as
+  (select id, name, imp_reference,business_unit_id, cc_sort_order from [AudimexEE_SQL].[dbo].[audit_universe]
+  where id in (select responsible_unit_id from act)
+  )
+  ,
+  rsi(id,name) as
+  (select id,name from [AudimexEE_SQL].[dbo].[reserve_sel_issue_00])
+  ,
+  agg(audit_id, audit_number,	start_date,	start_year, obj_name,	subj_cat,	audit_status,	finding_title,	finding_status,	finding_reference_number,	finding_organisational_level,	action_status,	
+  due_date,	closed_when,	action_description, responsible_auditor_id,	auditor,	responsible_auditee_id,	auditee,	responsible,	action_no,	old_state,	new_state,	last_change_user,	change_date,	
+  change_comment,	cc_sort_order, aud_univ_name,	aud_obj_name,	cognos_code, selectmetatime,actionid,maxmetatime)
+  as (
+  select
+  isnull(aud.id,'') as audit_id,
+  isnull(aud.a_number,'') as audit_number,
+  isnull(aud.start_date,'') as start_date,
+  isnull(aud.start_year,'') as start_year,
+  isnull(aud.name,'') as obj_name,
+  isnull(audm.name,'') as subj_cat,
+  isnull(aud.status,'') as audit_status,
+  isnull(iss.title,'') as finding_title,
+  isnull(iss.status,'') as finding_status,
+  isnull(iss.cc_overlay_order,'') as finding_reference_number,
+  isnull(rsi.name,'') as finding_organisational_level,
+  isnull(act.status,'') as action_status,
+  isnull(act.init_finish_date,'') as due_date,
+  isnull(act.closed_when,'') as closed_when,
+  isnull(act.action,'') as action_description,
+  isnull(act.responsible_auditor_id,'') as responsible_auditor_id,
+  isnull(concat(auditor.firstname,' ', auditor.lastname),'') as auditor,
+  isnull(act.responsible_auditee_id,'') as responsible_auditee_id,
+  isnull(concat(auditee.firstname,' ', auditee.lastname),'') as auditee,
+  isnull(act.responsible,'') as responsible,
+  isnull(act.action_no,'') as action_no,
+  isnull(logt.name,'') as old_state,
+  isnull(logt.name1,'') as new_state,
+  isnull(usr.name,'') as last_change_user,
+  isnull(logt.change_date,'') as change_date,
+  isnull(logt.change_comment,'') as change_comment,
+  isnull(aun.cc_sort_order,'') as cc_sort_order,
+  isnull(aun.name,'') as aud_univ_name,
+  isnull(concat(aun.name,' (',aun.cognos_code,') - ',aud.a_number, ' - ' ,aud.start_year),'') as aud_obj_name,
+  isnull(aun.cognos_code,'') as cognos_code,
+  isnull(logt.meta_tx_time,'') as selectmetatime,
+  act.id as actionid,
+  max(logt.meta_tx_time) over (PARTITION BY act.id) as maxmetatime
+  from act
+  left join iss on iss.id=act.issue_id
+  inner join aud on aud.id=iss.aud_id
+  left join audm on iss.activity_id=audm.id
+  left join auditor on act.responsible_auditor_id=auditor.id
+  left join auditee on act.responsible_auditee_id=auditee.id
+  left join logt
+  on act.id=logt.obj_id
+  left join usr
+  on logt.user_id=usr.id
+  left join aun
+  on act.responsible_unit_id=aun.id
+  left join rsi
+  on (iss.reserve_sel_issue_00_id=rsi.id)
+  Where
+  (iss.title is not null or act.action is not null)
+  )
+  select
+  agg.audit_id,
+  agg.audit_number,
+  agg.start_year,	
+  agg.obj_name,
+  agg.subj_cat,
+  agg.audit_status,
+  agg.finding_title,
+  agg.finding_status,
+  agg.finding_reference_number,
+  agg.finding_organisational_level,
+  agg.action_status,
+  agg.due_date,
+  agg.closed_when,
+  agg.action_description,
+  agg.responsible_auditor_id,
+  agg.auditor,
+  agg.responsible_auditee_id,
+  agg.auditee,
+  agg.responsible,
+  agg.action_no,
+  agg.old_state,
+  agg.new_state,
+  agg.last_change_user,
+  agg.change_date,
+  agg.change_comment,
+  agg.aud_univ_name,
+  agg.aud_obj_name,
+  agg.cognos_code,
+  agg.cc_sort_order,
+  agg.start_date,
+  case 
+  when left(agg.cc_sort_order,4) ='   1' then 'GFPS'
+  when left(agg.cc_sort_order,4) ='   2' then 'GFCS'
+  when left(agg.cc_sort_order,4) ='   3' then 'GFMS'
+  when left(agg.cc_sort_order,4) ='   4' then 'CORP'
+  when left(agg.cc_sort_order,4) ='   5' then 'Non-Standard Audits'
+  when left(agg.cc_sort_order,4) ='   6' then 'IT Audits'
+  else 'other_division'	
+  end
+  as division
+  from agg
+  where
+  agg.selectmetatime = agg.maxmetatime
+  ORDER BY agg.audit_number, agg.finding_reference_number

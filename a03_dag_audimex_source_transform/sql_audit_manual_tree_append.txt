@@ -1,0 +1,33 @@
+INSERT INTO IA.AUDIMEX_SOURCE.TBL_AUDMX_AUDIT_MANUAL_TREE
+(sort_order_a, audit_manual, cascated_audit_manual,sort_order_b,audit_chapter,sort_order,guideline)
+with
+man(sort_order, name) as 
+(select sort_order, name from IA.AUDIMEX_SOURCE.AUDIT_CONCEPT
+where len(sort_order)=4)
+,
+ch(sort_order, name) as 
+(select sort_order, name from IA.AUDIMEX_SOURCE.AUDIT_CONCEPT
+where len(sort_order)=9)
+,
+pro(sort_order, name) as
+(select sort_order,name from IA.AUDIMEX_SOURCE.ABSTRACT_GUIDELINE)
+select 
+man.sort_order, 
+man.name,
+CASE 
+WHEN man.sort_order = ' 243' THEN 'Supply Chain Management'
+WHEN man.sort_order = ' 251' THEN 'Sales'
+WHEN man.sort_order = ' 252' THEN 'Central Sales'
+WHEN man.sort_order = ' 452' THEN 'Central Sales'
+WHEN man.sort_order = ' 272' THEN 'Quality'
+ELSE man.name
+END,
+ch.sort_order, 
+ch.name, 
+pro.sort_order, 
+pro.name
+from man
+left join ch
+on man.sort_order=left(ch.sort_order,4)
+left join pro
+on ch.sort_order=left(pro.sort_order,9)

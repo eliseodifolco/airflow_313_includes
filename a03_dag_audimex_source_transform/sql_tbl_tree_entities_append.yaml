@@ -1,0 +1,28 @@
+sql_tbl_tree_entities_append: >
+  INSERT INTO IA.AUDIMEX_SOURCE.TBL_TREE_ENTITIES(L1, L2, L3, L4)
+  WITH
+  l1(cc_sort_order) AS
+  (select DISTINCT cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE
+  where len(cc_sort_order)=4)
+  ,
+  l2(cc_sort_order) AS
+  (select DISTINCT cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE
+  where len(cc_sort_order)=9)
+  ,
+  l3(cc_sort_order) AS
+  (select DISTINCT cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE
+  where len(cc_sort_order)=14)
+  ,
+  l4(cc_sort_order) AS
+  (select DISTINCT cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE
+  where len(cc_sort_order)=19)
+  select
+  l1.cc_sort_order as l1,
+  l2.cc_sort_order as l2,
+  l3.cc_sort_order as l3,
+  l4.cc_sort_order as l4
+  from l1
+  left join l2
+  on l1.cc_sort_order = left(l2.cc_sort_order,4)
+  left join l3 on l2.cc_sort_order = left(l3.cc_sort_order,9)
+  left join l4 on l3.cc_sort_order = left(l4.cc_sort_order,14)

@@ -1,0 +1,104 @@
+sql_core_table_append: >
+  INSERT INTO IA.PUBLIC_REPORTS.PBIREP_ASSURANCE_CORE_FACT_TABLE
+  (FINDING_TITLE, RISK, AUDIT_NUMBER, AUDIT_NAME, AUDIT_YEAR, AUDIT_PREOCEDURE_TITLE, AUDIT_PRECEDURE_DESC_TEXT, AUDIT_PROCEDURE_STATUS_CODE, AUDIT_PROCEDURE_STATUS, AUDIT_PROCEDURE_WORK_DESCRIPTION, AUDIT_PROCEDURE_TARGET_COUNT, SORT_ORDER_A, AUDIT_MANUAL, CASCATED_AUDIT_MANUAL, SORT_ORDER_B, AUDIT_CHAPTER, SORT_ORDER, AUDIT_PROCEDURE, CC_SORT_ORDER, DIVISION, BUSINESS_UNIT, AUDITOR)
+  with
+  ws(nr,name, sort_order) as
+  (select nr, name,sort_order from IA.AUDIMEX_SOURCE.wal_state)
+  ,
+  iss(id,aud_id, cc_overlay_order, gui_id,activity_id,title,status_code, status, reserve_auditee_id_00, reserve_sel_issue_00_id) as
+  (select a.id, a.auditing_id,a.cc_overlay_order, a.guideline_id, a.activity_id, a.title,a.weight, ws.name, a.reserve_auditee_id_00, a.reserve_sel_issue_00_id 
+  from IA.AUDIMEX_SOURCE.issue a
+  left join ws on a.weight=ws.nr)
+  ,
+  gui(id,sort_order,gui_name,gui_desc_text, gui_state,gui_work_description,target_count, activity_id) as
+  (select 
+  id,sort_order,name, description_text, state,work_description, target_count, activity_id from IA.AUDIMEX_SOURCE.GUIDELINE)
+  ,
+  activ(id, sort_order,NAME, auditing_id, state, father_id) AS 
+  ( SELECT id, sort_order,NAME, auditing_id, state, father_id FROM IA.AUDIMEX_SOURCE.ACTIVITY)
+  ,
+  aud(id,status,universe_id,a_number,name,start_year ) as
+  (select a.id, ws.name, a.audit_universe_id, a_number,a.name, left(a.start_date,4) from IA.AUDIMEX_SOURCE.AUDITING a
+  left join ws on a.state=ws.nr
+  where ws.name not like 'Cancelled'
+  ) 
+  ,
+  dim_audit_manual
+  (
+  SORT_ORDER_A,
+  AUDIT_MANUAL,
+  CASCATED_AUDIT_MANUAL,
+  SORT_ORDER_B,
+  AUDIT_CHAPTER,
+  SORT_ORDER,
+  GUIDELINE) AS (
+  SELECT    
+  CASE 
+  WHEN sort_order_a = ' 243' THEN ' 043'
+  WHEN sort_order_a = ' 251' THEN ' 051'
+  WHEN sort_order_a = ' 452' THEN ' 252'
+  WHEN sort_order_a = ' 272' THEN ' 072'
+  ELSE sort_order_a
+  END,
+  AUDIT_MANUAL,
+  CASCATED_AUDIT_MANUAL,
+  SORT_ORDER_B,
+  AUDIT_CHAPTER,
+  SORT_ORDER,
+  GUIDELINE
+  FROM IA.AUDIMEX_SOURCE.TBL_AUDMX_AUDIT_MANUAL_TREE)
+  ,
+  dim_division AS 
+  (SELECT auditing_id, cc_sort_order, division FROM IA.AUDIMEX_SOURCE.TBL_AUDMX_AUDITING_TO_DIVISION)
+  ,
+  dim_bu(cc_sort_order, business_unit) AS 
+  (SELECT cc_sort_order, BUSINESS_UNIT FROM IA.AUDIMEX_SOURCE.TBL_AUDMX_DIVISION_TREE
+  WHERE BUSINESS_UNIT IS NOT null)
+  ,
+  dim_auditor(audit_id, audit_number, start_year, auditor) AS (
+  SELECT a.ID, a.A_NUMBER ,YEAR(date(a.START_DATE,'YYYY-MM-DD')) AS START_YEAR, CONCAT(b.firstname,' ',b.lastname) AS AUDITOR
+  FROM ia.AUDIMEX_SOURCE.AUDITING a
+  LEFT JOIN ia.AUDIMEX_SOURCE.AUDITOR b
+  ON a.LEADING_AUDITOR_ID=b.id
+  GROUP BY a.ID, a.A_NUMBER ,YEAR(date(a.START_DATE,'YYYY-MM-DD')), CONCAT(b.firstname,' ',b.lastname))
+  SELECT 
+  iss.title AS finding_title,
+  iss.status AS risk,
+  aud.a_number AS audit_number,
+  aud.NAME AS audit_name,
+  left(aud.a_number,4) AS audit_year,
+  gui.gui_name AS audit_preocedure_title,
+  gui.gui_desc_text AS audit_precedure_desc_text,
+  gui.gui_state AS audit_procedure_status_code,
+  ws.NAME AS audit_procedure_status,
+  gui.gui_work_description AS audit_procedure_work_description,
+  gui.target_count AS audit_procedure_target_count,
+  dim_audit_manual.sort_order_a,
+  dim_audit_manual.AUDIT_MANUAL,
+  dim_audit_manual.CASCATED_AUDIT_MANUAL,
+  dim_audit_manual.SORT_ORDER_B,
+  dim_audit_manual.AUDIT_CHAPTER,
+  dim_audit_manual.SORT_ORDER,
+  dim_audit_manual.GUIDELINE AS audit_procedure,
+  dim_division.cc_sort_order,
+  dim_division.division,
+  dim_bu.business_unit,
+  dim_auditor.auditor
+  FROM gui  
+  INNER JOIN activ 
+  ON gui.activity_id=activ.id 
+  INNER JOIN aud 
+  ON activ.auditing_id=aud.id
+  LEFT JOIN dim_audit_manual
+  ON gui.sort_order = dim_audit_manual.sort_order
+  LEFT JOIN iss 
+  ON iss.gui_id = gui.id
+  LEFT JOIN dim_division
+  ON aud.id=dim_division.auditing_id
+  LEFT JOIN dim_bu 
+  ON dim_division.cc_sort_order = dim_bu.cc_sort_order
+  LEFT JOIN dim_auditor
+  ON aud.a_number=dim_auditor.audit_number
+  LEFT JOIN ws
+  ON ws.nr=gui.gui_state
+  ORDER BY gui.sort_order

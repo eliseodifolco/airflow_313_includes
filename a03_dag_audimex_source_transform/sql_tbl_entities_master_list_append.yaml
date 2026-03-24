@@ -1,0 +1,7 @@
+sql_tbl_entities_master_list_append: >
+  Insert into IA.AUDIMEX_SOURCE.TBL_ENTITIES_MASTER_LIST(CC_SORT_ORDER, ENTITY_NAME,AU_TYPE)
+  select au.cc_sort_order, au.name, aut.name AS au_type_id
+  from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE au
+  LEFT JOIN IA.AUDIMEX_SOURCE.AUDIT_UNI_TYPE aut
+  ON au.au_type_id = aut.id
+  group by au.cc_sort_order, au.name, aut.name

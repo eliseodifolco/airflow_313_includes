@@ -1,0 +1,89 @@
+sql_tbl_tree_flat_append: >
+  INSERT INTO IA.AUDIMEX_SOURCE.TBL_TREE_FLAT
+  (AUD_USER_ID, USER_NAME, EMAIL, CC_SORT_ORDER, ENTITY_NAME)
+  WITH
+  conn(auditee_id,auditor_id,audit_universe_id) as
+  (select auditee_id,auditor_id,audit_universe_id from  IA.AUDIMEX_SOURCE.USER_TO_AU)
+  ,
+  au(id, name, cc_sort_order) as
+  (select id, name, cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE)
+  ,
+  ae(id, salutation, firstname, lastname, email, title) as
+  (select id, salutation, firstname, lastname, email, title from IA.AUDIMEX_SOURCE.AUDITEE)
+  ,
+  ana(auditee_id, aename, email, cc_sort_order, auname) as
+  (
+  select conn.auditee_id,concat(ae.firstname,' ', ae.lastname),ae.email, au.cc_sort_order, au.name from conn
+  inner join au on conn.audit_universe_id = au.id
+  inner join ae on conn.auditee_id = ae.id
+  where conn.audit_universe_id != 100173)
+  ,
+  l1(cc_sort_order) AS
+  (select DISTINCT cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE
+  where len(cc_sort_order)=4)
+  ,
+  l2(cc_sort_order) AS
+  (select DISTINCT cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE
+  where len(cc_sort_order)=9)
+  ,
+  l3(cc_sort_order) AS
+  (select DISTINCT cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE
+  where len(cc_sort_order)=14)
+  ,
+  l4(cc_sort_order) AS
+  (select DISTINCT cc_sort_order from IA.AUDIMEX_SOURCE.AUDIT_UNIVERSE
+  where len(cc_sort_order)=19)
+  ,
+  tree(l1,l2,l3,l4) AS
+  (select
+  l1.cc_sort_order as l1,
+  l2.cc_sort_order as l2,
+  l3.cc_sort_order as l3,
+  l4.cc_sort_order as l4
+  from l1
+  left join l2 on l1.cc_sort_order = left(l2.cc_sort_order,4)
+  left join l3 on l2.cc_sort_order = left(l3.cc_sort_order,9)
+  left join l4 on l3.cc_sort_order = left(l4.cc_sort_order,14)
+  )
+  ,
+  ll1(auditee_id, aename, email, cc_sort_order, auname, l2) AS
+  (SELECT ana.auditee_id, ana.aename, ana.email, ana.cc_sort_order, ana.auname, tree.l2
+  FROM ana
+  LEFT JOIN tree ON ana.cc_sort_order = tree.l1
+  WHERE len(ana.cc_sort_order) = 4
+  AND tree.l2 IS NOT null)
+  ,
+  ana2(auditee_id, aename, email, cc_sort_order, auname) AS
+  (SELECT auditee_id, aename, email, cc_sort_order, auname FROM ana
+  UNION ALL
+  SELECT auditee_id, aename, email, l2, auname FROM ll1)
+  ,
+  ll2(auditee_id, aename, email, cc_sort_order, auname, l3) AS
+  (SELECT ana2.auditee_id, ana2.aename, ana2.email, ana2.cc_sort_order, ana2.auname, tree.l3
+  FROM ana2
+  LEFT JOIN tree ON ana2.cc_sort_order = tree.l2
+  WHERE len(ana2.cc_sort_order) = 9
+  AND tree.l3 IS NOT null)
+  ,
+  ana3(auditee_id, aename, email, cc_sort_order, auname) AS
+  (SELECT auditee_id, aename, email, cc_sort_order, auname FROM ana2
+  UNION ALL
+  SELECT auditee_id, aename, email, l3, auname FROM ll2)
+  ,
+  ll3(auditee_id, aename, email, cc_sort_order, auname, l4) AS
+  (SELECT ana3.auditee_id, ana3.aename, ana3.email, ana3.cc_sort_order, ana3.auname, tree.l4
+  FROM ana3
+  LEFT JOIN tree ON ana3.cc_sort_order = tree.l3
+  WHERE len(ana3.cc_sort_order) = 14
+  AND tree.l4 IS NOT null)
+  ,
+  ana4(auditee_id, aename, email, cc_sort_order, auname) AS
+  (SELECT auditee_id, aename, email, cc_sort_order, auname FROM ana3
+  UNION ALL
+  SELECT auditee_id, aename, email, l4, auname FROM ll3)
+  SELECT auditee_id AS aud_user_id,
+  aename AS user_name,
+  email,
+  cc_sort_order,
+  auname AS entity_name
+  FROM ana4
