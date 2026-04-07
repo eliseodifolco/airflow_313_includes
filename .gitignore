@@ -1,3 +1,4 @@
 guideline.json
 *.parquet
 *.csv
+credentials.json
